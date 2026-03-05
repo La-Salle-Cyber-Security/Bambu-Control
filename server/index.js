@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { requireToken } from "./auth.js";
 import { createPrinterBridge } from "./printerBridge.js";
+import { summarizeReport } from "./statusParser.js";
 
 const app = express();
 app.use(cors());
@@ -19,6 +20,20 @@ app.post("/api/printer/led", requireToken, (req, res) => {
   }
   printer.led(state);
   res.json({ ok: true, state });
+});
+
+app.get("/api/printer/status", requireToken, (req, res) => {
+  res.json(printer.getStatus());
+});
+
+app.get("/api/printer/status/pretty", requireToken, (req, res) => {
+  const full = printer.getStatus();
+  const report = full.report;
+  res.json({
+    ok: true,
+    mqtt: full.mqtt,
+    summary: summarizeReport(report),
+  });
 });
 
 const PORT = 3000;

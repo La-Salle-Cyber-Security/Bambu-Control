@@ -52,6 +52,9 @@ export function createPrinterBridge() {
 
     try {
       state.lastJson = JSON.parse(raw);
+      for (const fn of reportListeners) {
+        try { fn(state.lastJson, topic); } catch (e) { /* ignore */ }
+      }
     } catch {
       state.lastJson = null;
     }
@@ -60,6 +63,13 @@ export function createPrinterBridge() {
   function publishSystem(systemPayload) {
     const msg = JSON.stringify({ system: systemPayload });
     client.publish(requestTopic, msg);
+  }
+
+  const reportListeners = new Set();
+
+  function onReport(fn) {
+    reportListeners.add(fn);
+    return () => reportListeners.delete(fn);
   }
 
   return {
@@ -78,6 +88,8 @@ export function createPrinterBridge() {
         reportRaw: state.lastJson ? undefined : state.lastRaw, // fallback if parse fails
       };
     },
+
+    onReport,
 
     // existing control
     led(state /* "on"|"off" */) {

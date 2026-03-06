@@ -115,12 +115,6 @@ client.on("interactionCreate", async (i) => {
                 return i.editReply(`⚠️ No telemetry yet. Last seen: ${data.mqtt.lastSeenAt || "never"}`);
             }
 
-            if (sub === "morse") {
-                const text = i.options.getString("text", true);
-                const result = await post("/api/printer/morse", { text });
-                return i.editReply(`📡 Sending Morse on chamber light: **${text}**`);
-            }
-
             const lines = [
                 `**State:** ${s.state ?? "unknown"}`,
                 `**File:** ${s.file ?? "unknown"}`,
@@ -138,6 +132,12 @@ client.on("interactionCreate", async (i) => {
             const state = i.options.getString("state", true);
             await post("/api/printer/led", { state });
             return i.editReply(`✅ Chamber light: **${state}**`);
+        }
+
+        if (sub === "morse") {
+            const text = i.options.getString("text", true);
+            const result = await post("/api/printer/morse", { text });
+            return i.editReply(`📡 Sending Morse on chamber light: **${text}**`);
         }
 
         return i.editReply("Unknown command.");

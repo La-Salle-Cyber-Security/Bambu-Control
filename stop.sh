@@ -13,3 +13,5 @@ if [ -f .bot.pid ]; then
 fi
 
 echo "✅ Stack stopped"
+
+##testing

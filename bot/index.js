@@ -115,6 +115,12 @@ client.on("interactionCreate", async (i) => {
                 return i.editReply(`⚠️ No telemetry yet. Last seen: ${data.mqtt.lastSeenAt || "never"}`);
             }
 
+            if (sub === "morse") {
+                const text = i.options.getString("text", true);
+                const result = await post("/api/printer/morse", { text });
+                return i.editReply(`📡 Sending Morse on chamber light: **${text}**`);
+            }
+
             const lines = [
                 `**State:** ${s.state ?? "unknown"}`,
                 `**File:** ${s.file ?? "unknown"}`,

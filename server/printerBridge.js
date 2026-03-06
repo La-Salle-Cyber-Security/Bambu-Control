@@ -1,5 +1,57 @@
 import mqtt from "mqtt";
 
+const MORSE = {
+  A: ".-",
+  B: "-...",
+  C: "-.-.",
+  D: "-..",
+  E: ".",
+  F: "..-.",
+  G: "--.",
+  H: "....",
+  I: "..",
+  J: ".---",
+  K: "-.-",
+  L: ".-..",
+  M: "--",
+  N: "-.",
+  O: "---",
+  P: ".--.",
+  Q: "--.-",
+  R: ".-.",
+  S: "...",
+  T: "-",
+  U: "..-",
+  V: "...-",
+  W: ".--",
+  X: "-..-",
+  Y: "-.--",
+  Z: "--..",
+  0: "-----",
+  1: ".----",
+  2: "..---",
+  3: "...--",
+  4: "....-",
+  5: ".....",
+  6: "-....",
+  7: "--...",
+  8: "---..",
+  9: "----.",
+  " ": "/",
+};
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function textToMorse(text) {
+  return text
+    .toUpperCase()
+    .split("")
+    .map((ch) => MORSE[ch] || "")
+    .filter(Boolean);
+}
+
 export function createPrinterBridge() {
   const serial = process.env.PRINTER_SERIAL;
   const host = process.env.MQTT_HOST;
@@ -72,8 +124,83 @@ export function createPrinterBridge() {
     return () => reportListeners.delete(fn);
   }
 
+
+  let morseBusy = false;
+
+  function ledImmediate(state /* "on" | "off" */) {
+    publishSystem({
+      sequence_id: String(Date.now()),
+      command: "ledctrl",
+      led_node: "chamber_light",
+      led_mode: state,
+      led_on_time: 0,
+      led_off_time: 0,
+      loop_times: 0,
+      interval_time: 0,
+    });
+  }
+
+  async function morse(text) {
+    if (morseBusy) {
+      return { ok: false, error: "Morse already running" };
+    }
+
+    const words = textToMorse(text);
+    if (!words.length) {
+      return { ok: false, error: "No valid Morse characters in text" };
+    }
+
+    morseBusy = true;
+
+    // timing unit in ms
+    const unit = 250;
+    const dot = unit;
+    const dash = unit * 3;
+    const intraSymbolGap = unit;      // between dots/dashes in same letter
+    const letterGap = unit * 3;       // between letters
+    const wordGap = unit * 7;         // between words
+
+    try {
+      for (let wi = 0; wi < words.length; wi++) {
+        const code = words[wi];
+
+        if (code === "/") {
+          await sleep(wordGap);
+          continue;
+        }
+
+        for (let si = 0; si < code.length; si++) {
+          const symbol = code[si];
+
+          ledImmediate("on");
+          await sleep(symbol === "." ? dot : dash);
+
+          ledImmediate("off");
+
+          // gap between symbols in same letter
+          if (si < code.length - 1) {
+            await sleep(intraSymbolGap);
+          }
+        }
+
+        // gap between letters, unless next token is word separator or end
+        const next = words[wi + 1];
+        if (wi < words.length - 1 && next !== "/") {
+          await sleep(letterGap);
+        }
+      }
+
+      ledImmediate("off");
+      return { ok: true, queued: true, text };
+    } catch (e) {
+      ledImmediate("off");
+      return { ok: false, error: e.message };
+    } finally {
+      morseBusy = false;
+    }
+  }
+
   return {
-    // Phase 1: read-only status
     getStatus() {
       return {
         ok: true,
@@ -84,25 +211,17 @@ export function createPrinterBridge() {
           requestTopic,
           lastSeenAt: state.lastSeenAt,
         },
-        report: state.lastJson, // parsed JSON when possible
-        reportRaw: state.lastJson ? undefined : state.lastRaw, // fallback if parse fails
+        report: state.lastJson,
+        reportRaw: state.lastJson ? undefined : state.lastRaw,
       };
     },
 
     onReport,
 
-    // existing control
-    led(state /* "on"|"off" */) {
-      publishSystem({
-        sequence_id: "1",
-        command: "ledctrl",
-        led_node: "chamber_light",
-        led_mode: state,
-        led_on_time: 0,
-        led_off_time: 0,
-        loop_times: 0,
-        interval_time: 0,
-      });
+    led(state) {
+      ledImmediate(state);
     },
+
+    morse,
   };
 }
